@@ -8,21 +8,21 @@ import os
 MOCK_JSON_DATA = {
     "osm": {
         "bounds": {
-            "@minlat": "30",
+            "@minlat": "40",
             "@minlon": "-120",
-            "@maxlat": "35",
-            "@maxlon": "-115"
+            "@maxlat": "50",
+            "@maxlon": "-100"
          },
         "node": [
             {
                 "@id": "12345",
-                "@lat": "120.5",
-                "@lon": "45.575"   
+                "@lat": "45.5",
+                "@lon": "-100.5"   
             },
             {
                 "@id": "54321",
-                "@lat": "127",
-                "@lon": "45.575"   
+                "@lat": "47",
+                "@lon": "-110"   
             }
         ],
         "way": [
@@ -156,6 +156,7 @@ class SearchTest(unittest.TestCase):
         self.mapdict = MOCK_JSON_DATA
         self.waydict = create_way_dict(self.mapdict)
         self.nodedict = create_node_dict(self.mapdict)
+        self.bbox = get_bounding_box(self.mapdict)
         
     def test_loads_data_into_dict(self):
         with open("tmp.json", "w") as tmp:
@@ -174,7 +175,7 @@ class SearchTest(unittest.TestCase):
         
         self.assertTrue(len(node_dict)==2)
         self.assertTrue(node_dict[12345].id == 12345)
-        self.assertTrue(node_dict[12345].coordinate.lat == 120.5)
+        self.assertTrue(node_dict[12345].coordinate.lat == 45.5)
         
     def test_correctly_creates_way_dict(self):
         way_dict = create_way_dict(MOCK_JSON_DATA)
@@ -187,21 +188,22 @@ class SearchTest(unittest.TestCase):
         self.assertTrue(way_dict[101].highway_value == None)
 
     def test_gets_correct_tailnodes_given_node_ids(self):
-        beg, end = get_tails_from_nodes(self.mapdict, self.nodedict, 12345, 54321)
+        beg = get_node_from_id(self.mapdict, self.nodedict, 12345)
+        end = get_node_from_id(self.mapdict, self.nodedict, 54321)
         self.assertTrue(type(beg) == Node)
         self.assertEqual(beg.id, 12345)
-        self.assertEqual(beg.coordinate, Point(120.5, 45.575))
+        self.assertEqual(beg.coordinate, Point(45.5, -100.5))
         
         self.assertTrue(type(end) == Node)
         self.assertEqual(end.id, 54321)
-        self.assertEqual(end.coordinate, Point(127, 45.575))
+        self.assertEqual(end.coordinate, Point(47.0, -110.0))
         
     def test_creates_correct_bbox(self):
         bbox = get_bounding_box(self.mapdict)
-        self.assertTrue(bbox.minlat == 30)
+        self.assertTrue(bbox.minlat == 40)
         self.assertTrue(bbox.minlon == -120)
-        self.assertTrue(bbox.maxlat == 35)
-        self.assertTrue(bbox.maxlon == -115)
+        self.assertTrue(bbox.maxlat == 50)
+        self.assertTrue(bbox.maxlon == -100)
         
     def test_haversine_distance_is_same_for_differnt_order(self):
         p1 = Point(51.510357, -0.116773)
@@ -213,6 +215,20 @@ class SearchTest(unittest.TestCase):
         add_all_ways_to_nodes(self.waydict, self.nodedict)
         self.assertEqual(self.nodedict[12345].ways, {100})
         self.assertEqual(self.nodedict[54321].ways, {101})
+        
+    def test_coordinates_to_nodes(self):
+        add_all_ways_to_nodes(self.waydict, self.nodedict)
+        p = Point(45.5001, -100.5)
+        ls = coordinates_to_nodes(p, self.nodedict, self.waydict, self.bbox)
+        self.assertEqual(4, ls.count(None))
+        self.assertEqual(type(ls[0]), Node)
+        self.assertEqual(ls[0].id, 12345)
+    
+    def test_does_not_add_far_nodes(self):
+        add_all_ways_to_nodes(self.waydict, self.nodedict)
+        p = Point(45.6, -100.5)
+        ls = coordinates_to_nodes(p, self.nodedict, self.waydict, self.bbox)
+        self.assertTrue(all(x == None for x in ls))
         
         
 if __name__ == '__main__':

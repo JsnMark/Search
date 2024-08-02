@@ -244,7 +244,7 @@ def coordinates_to_nodes(point: Point, node_dict: dict, way_dict: dict, bbox: Bo
     
     # Check if within bounds
     if not bbox.check_inside(point):
-        raise Exception("Coordinates are not within the given map's bounding box")
+        raise Exception(f"Coordinates({point.lat}, {point.lon}) are not within the given map's bounding box {bbox}")
     
     # Create an empty list of tuples the 5 closest nodes and their distance to the point 
     closest_nodes = [(None, math.inf) for i in range(AMOUNT_OF_CLOSEST_NODES)]
