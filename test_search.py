@@ -3,7 +3,13 @@ from search import *
 import unittest
 import json
 import os
+import random
 
+# USE THIS FILE TO TEST 
+# THERE IS A PATH FROM CVS PHARMACY TO MARK JUPITER
+# CVS:          79 Jay St, Brooklyn, NY 11201
+# Mark Jupiter: 191 Plymouth St, Brooklyn, NY 11201
+TEST_JSON_FILE = "json_maps/nymap2_data.json"
 
 MOCK_JSON_DATA = {
     "osm": {
@@ -23,6 +29,11 @@ MOCK_JSON_DATA = {
                 "@id": "54321",
                 "@lat": "47",
                 "@lon": "-110"   
+            },
+            {
+                "@id": "11111",
+                "@lat": "45.4999",
+                "@lon": "-100.5"   
             }
         ],
         "way": [
@@ -31,6 +42,9 @@ MOCK_JSON_DATA = {
                 "nd": [
                     {
                         "@ref": "12345"
+                    },
+                    {
+                        "@ref": "11111"
                     }
                 ],
                 "tag": [
@@ -61,7 +75,7 @@ MOCK_JSON_DATA = {
 
 class NodeTest(unittest.TestCase):
     def setUp(self):
-        self.node = Node(osm_id=12345, lat=120.5, lon=45.575)
+        self.node = OSM_Node(osm_id=12345, lat=120.5, lon=45.575)
         self.way = Way(100)
         
     def test_nodes_have_correct_data(self):
@@ -84,22 +98,22 @@ class NodeTest(unittest.TestCase):
         self.assertEqual(len(self.node.ways), 1)
         
     def test_node__eq__(self):
-        new_node = Node(self.node.id, self.node.coordinate.lat, self.node.coordinate.lon)
+        new_node = OSM_Node(self.node.id, self.node.coordinate.lat, self.node.coordinate.lon)
         self.assertTrue(new_node == self.node)
         
-        new_node_1 = Node(3, self.node.coordinate.lat, self.node.coordinate.lon)
+        new_node_1 = OSM_Node(3, self.node.coordinate.lat, self.node.coordinate.lon)
         self.assertFalse(new_node_1 == self.node)
         
-        new_node_1 = Node(self.node.id, 3, self.node.coordinate.lon)
+        new_node_1 = OSM_Node(self.node.id, 3, self.node.coordinate.lon)
         self.assertFalse(new_node_1 == self.node)
         
-        new_node_1 = Node(self.node.id, self.node.coordinate.lat, 3)
+        new_node_1 = OSM_Node(self.node.id, self.node.coordinate.lat, 3)
         self.assertFalse(new_node_1 == self.node)
 
 
 class WayTest(unittest.TestCase):
     def setUp(self):
-        self.node = Node(osm_id=12345, lat=120.5, lon=45.575)
+        self.node = OSM_Node(osm_id=12345, lat=120.5, lon=45.575)
         self.way = Way(100)
         
     def test_ways_have_correct_data(self):
@@ -151,7 +165,7 @@ class BoundingBoxTest(unittest.TestCase):
         self.assertTrue(bbox.check_inside(Point(0, 50)))
         self.assertTrue(bbox.check_inside(Point(50, 100)))
 
-class SearchTest(unittest.TestCase):
+class SearchTestUsingMockData(unittest.TestCase):
     def setUp(self):
         self.mapdict = MOCK_JSON_DATA
         self.waydict = create_way_dict(self.mapdict)
@@ -173,7 +187,7 @@ class SearchTest(unittest.TestCase):
     def test_correctly_creates_node_dict(self):
         node_dict = create_node_dict(MOCK_JSON_DATA)
         
-        self.assertTrue(len(node_dict)==2)
+        self.assertTrue(len(node_dict)==3)
         self.assertTrue(node_dict[12345].id == 12345)
         self.assertTrue(node_dict[12345].coordinate.lat == 45.5)
         
@@ -190,11 +204,11 @@ class SearchTest(unittest.TestCase):
     def test_gets_correct_tailnodes_given_node_ids(self):
         beg = get_node_from_id(self.mapdict, self.nodedict, 12345)
         end = get_node_from_id(self.mapdict, self.nodedict, 54321)
-        self.assertTrue(type(beg) == Node)
+        self.assertTrue(type(beg) == OSM_Node)
         self.assertEqual(beg.id, 12345)
         self.assertEqual(beg.coordinate, Point(45.5, -100.5))
         
-        self.assertTrue(type(end) == Node)
+        self.assertTrue(type(end) == OSM_Node)
         self.assertEqual(end.id, 54321)
         self.assertEqual(end.coordinate, Point(47.0, -110.0))
         
@@ -220,15 +234,117 @@ class SearchTest(unittest.TestCase):
         add_all_ways_to_nodes(self.waydict, self.nodedict)
         p = Point(45.5001, -100.5)
         ls = coordinates_to_nodes(p, self.nodedict, self.waydict, self.bbox)
-        self.assertEqual(4, ls.count(None))
-        self.assertEqual(type(ls[0]), Node)
+        self.assertEqual(len(ls), 1)
+        self.assertEqual(type(ls[0]), OSM_Node)
         self.assertEqual(ls[0].id, 12345)
     
-    def test_does_not_add_far_nodes(self):
+    def test_c2n_does_not_add_far_nodes(self):
         add_all_ways_to_nodes(self.waydict, self.nodedict)
         p = Point(45.6, -100.5)
         ls = coordinates_to_nodes(p, self.nodedict, self.waydict, self.bbox)
         self.assertTrue(all(x == None for x in ls))
+        
+class SearchClassesTestUsingTestJsonFile(unittest.TestCase):
+    def setUp(self):
+        self.mapdict = load_json_to_dict(TEST_JSON_FILE)
+        self.waydict = create_way_dict(self.mapdict)
+        self.nodedict = create_node_dict(self.mapdict)
+        self.bbox = get_bounding_box(self.mapdict)
+        add_all_ways_to_nodes(self.waydict, self.nodedict)
+        
+        self.map = Map(self.nodedict, self.waydict, self.bbox)
+        
+        node_id, osm_node = random.choice(list(self.nodedict.items()))
+        node = Astar_node(osm_node, 0, 100, None)
+        self.nodedict.pop(node_id)
+        self.f = Frontier(node)
+    
+    def test_astar_nodes_can_be_created_from_osm_nodes(self):
+        node_id, osm_node = random.choice(list(self.nodedict.items()))
+        anode = Astar_node(osm_node, 2, 1.1, None)
+        self.assertTrue(anode.OSM_node == osm_node)
+        self.assertTrue(anode.gcost == 2)
+        self.assertTrue(anode.hcost == 1.1)
+        self.assertTrue(anode.pathcost == 3.1)
+        self.assertTrue(anode.parent is None)
+    
+    def test_astar_node_contains_parent(self):
+        node_id, osm_node = random.choice(list(self.nodedict.items()))
+        self.nodedict.pop(node_id)
+        parent_id, parent_node = random.choice(list(self.nodedict.items()))
+        
+        parent = Astar_node(parent_node, 4, 5, None)
+        anode = Astar_node(osm_node, 2, 1.1, parent)
+        
+        self.assertTrue(anode.parent == parent)
+        self.assertTrue(type(anode.parent)==Astar_node)
+        self.assertTrue(parent.parent == None)
+    
+    def test_setup_frontier(self):
+        node_id, osm_node = random.choice(list(self.nodedict.items()))
+        node = Astar_node(osm_node, 0, 100, None)
+        self.nodedict.pop(node_id)
+        f = Frontier(node)
+        
+        self.assertTrue(len(f.deque) == 1)
+        self.assertTrue(node in f.deque)
+        
+        
+    def test_remove_from_frontier(self):
+        self.f.remove()
+        self.assertTrue(len(self.f.deque) == 0)
+        # error when removing from empty deque
+        with self.assertRaises(IndexError):
+            self.f.remove()
+            
+    def test_frontier_is_empty(self):
+        self.assertFalse(self.f.is_empty())
+        self.assertTrue(len(self.f.deque) == 1)
+        self.f.remove()
+        self.assertTrue(self.f.is_empty())
+        self.assertTrue(len(self.f.deque) == 0)
+        
+    def test_add_to_end_of_frontier(self):
+        ls = list(self.nodedict.values())
+        anode1 = Astar_node(random.choice(ls), 1, 100, None)
+        anode2 = Astar_node(random.choice(ls), 30, 75, anode1)
+        
+        f = Frontier(anode1)
+        f.add(anode2)
+        
+        self.assertTrue(len(f.deque) == 2)
+        self.assertTrue(f.deque[0] == anode1)
+        self.assertTrue(f.deque[1] == anode2)
+    
+    # TODO Rethink how the frontier works!!!!!
+    
+    def test_add_to_front_of_frontier(self):
+        ls = list(self.nodedict.values())
+        anode1 = Astar_node(random.choice(ls), 1, 100, None)
+        anode2 = Astar_node(random.choice(ls), 30, 75, anode1)
+        
+        f = Frontier(anode1)
+        f.add(anode2)
+        
+        anode0 = Astar_node(random.choice(ls), 0, 80, anode1)
+        f.add(anode0)
+        self.assertTrue(len(f.deque) == 3)
+        self.assertTrue(f.deque[0] == anode0)
+        self.assertTrue(f.deque[1] == anode1)
+        self.assertTrue(f.deque[2] == anode2)
+        
+    def test_add_to_middle_of_frontier(self):
+        ls = list(self.nodedict.values())
+        anode1 = Astar_node(random.choice(ls), 1, 100, None)
+        anode3 = Astar_node(random.choice(ls), 30, 75, anode1)
+        f = Frontier(anode1)
+        f.add(anode3)
+        anode0 = Astar_node(random.choice(ls), 0, 80, anode1)
+        f.add(anode0)
+        
+        anode2 = Astar_node(random.choice(ls), 40, 62, anode3)
+        
+        
         
         
 if __name__ == '__main__':
