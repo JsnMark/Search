@@ -9,7 +9,7 @@ import random
 # THERE IS A PATH FROM CVS PHARMACY TO MARK JUPITER
 # CVS:          79 Jay St, Brooklyn, NY 11201
 # Mark Jupiter: 191 Plymouth St, Brooklyn, NY 11201
-TEST_JSON_FILE = "json_maps/nymap2_data.json"
+TEST_JSON_FILE = "json_maps/nymap3_data.json"
 
 MOCK_JSON_DATA = {
     "osm": {
@@ -75,7 +75,7 @@ MOCK_JSON_DATA = {
 
 class NodeTest(unittest.TestCase):
     def setUp(self):
-        self.node = OSM_Node(osm_id=12345, lat=120.5, lon=45.575)
+        self.node = OSMNode(osm_id=12345, lat=120.5, lon=45.575)
         self.way = Way(100)
         
     def test_nodes_have_correct_data(self):
@@ -98,22 +98,21 @@ class NodeTest(unittest.TestCase):
         self.assertEqual(len(self.node.ways), 1)
         
     def test_node__eq__(self):
-        new_node = OSM_Node(self.node.id, self.node.coordinate.lat, self.node.coordinate.lon)
+        new_node = OSMNode(self.node.id, self.node.coordinate.lat, self.node.coordinate.lon)
         self.assertTrue(new_node == self.node)
         
-        new_node_1 = OSM_Node(3, self.node.coordinate.lat, self.node.coordinate.lon)
+        new_node_1 = OSMNode(3, self.node.coordinate.lat, self.node.coordinate.lon)
         self.assertFalse(new_node_1 == self.node)
         
-        new_node_1 = OSM_Node(self.node.id, 3, self.node.coordinate.lon)
+        new_node_1 = OSMNode(self.node.id, 3, self.node.coordinate.lon)
         self.assertFalse(new_node_1 == self.node)
         
-        new_node_1 = OSM_Node(self.node.id, self.node.coordinate.lat, 3)
+        new_node_1 = OSMNode(self.node.id, self.node.coordinate.lat, 3)
         self.assertFalse(new_node_1 == self.node)
-
 
 class WayTest(unittest.TestCase):
     def setUp(self):
-        self.node = OSM_Node(osm_id=12345, lat=120.5, lon=45.575)
+        self.node = OSMNode(osm_id=12345, lat=120.5, lon=45.575)
         self.way = Way(100)
         
     def test_ways_have_correct_data(self):
@@ -134,7 +133,6 @@ class WayTest(unittest.TestCase):
         self.way.add_node(self.node.id)
         self.assertEqual(len(self.way.nodes), 1)
         
-
 class BoundingBoxTest(unittest.TestCase):
     def test_create_bbox(self):
         bbox = BoundingBox(120.5, 125.5, 126, 125.6)
@@ -204,11 +202,11 @@ class SearchTestUsingMockData(unittest.TestCase):
     def test_gets_correct_tailnodes_given_node_ids(self):
         beg = get_node_from_id(self.mapdict, self.nodedict, 12345)
         end = get_node_from_id(self.mapdict, self.nodedict, 54321)
-        self.assertTrue(type(beg) == OSM_Node)
+        self.assertTrue(type(beg) == OSMNode)
         self.assertEqual(beg.id, 12345)
         self.assertEqual(beg.coordinate, Point(45.5, -100.5))
         
-        self.assertTrue(type(end) == OSM_Node)
+        self.assertTrue(type(end) == OSMNode)
         self.assertEqual(end.id, 54321)
         self.assertEqual(end.coordinate, Point(47.0, -110.0))
         
@@ -225,6 +223,14 @@ class SearchTestUsingMockData(unittest.TestCase):
         self.assertAlmostEqual(5897.658, round(haversine(p1, p2), 3))
         self.assertAlmostEqual(5897.658, round(haversine(p2, p1), 3))
         
+    def test_heuristic(self):
+        p1 = Point(51.510357, -0.116773)
+        p2 = Point(38.889931, -77.009003)
+        n1 = OSMNode(1, p1.lat, p1.lon)
+        n2 = OSMNode(2, p2.lat, p2.lon)
+        self.assertAlmostEqual(5897.658, round(heuristic(n1, n2), 3))
+        self.assertAlmostEqual(5897.658, round(heuristic(n2, n1), 3))
+        
     def test_add_ways_to_nodes(self):
         add_all_ways_to_nodes(self.waydict, self.nodedict)
         self.assertEqual(self.nodedict[12345].ways, {100})
@@ -235,7 +241,7 @@ class SearchTestUsingMockData(unittest.TestCase):
         p = Point(45.5001, -100.5)
         ls = coordinates_to_nodes(p, self.nodedict, self.waydict, self.bbox)
         self.assertEqual(len(ls), 1)
-        self.assertEqual(type(ls[0]), OSM_Node)
+        self.assertEqual(type(ls[0]), OSMNode)
         self.assertEqual(ls[0].id, 12345)
     
     def test_c2n_does_not_add_far_nodes(self):
@@ -244,7 +250,7 @@ class SearchTestUsingMockData(unittest.TestCase):
         ls = coordinates_to_nodes(p, self.nodedict, self.waydict, self.bbox)
         self.assertTrue(all(x == None for x in ls))
         
-class SearchClassesTestUsingTestJsonFile(unittest.TestCase):
+class AnodeAndFrontierTestUsingTestJsonFile(unittest.TestCase):
     def setUp(self):
         self.mapdict = load_json_to_dict(TEST_JSON_FILE)
         self.waydict = create_way_dict(self.mapdict)
@@ -255,13 +261,13 @@ class SearchClassesTestUsingTestJsonFile(unittest.TestCase):
         self.map = Map(self.nodedict, self.waydict, self.bbox)
         
         node_id, osm_node = random.choice(list(self.nodedict.items()))
-        node = Astar_node(osm_node, 0, 100, None)
+        node = AstarNode(osm_node, 0, 100, None)
         self.nodedict.pop(node_id)
         self.f = Frontier(node)
     
     def test_astar_nodes_can_be_created_from_osm_nodes(self):
         node_id, osm_node = random.choice(list(self.nodedict.items()))
-        anode = Astar_node(osm_node, 2, 1.1, None)
+        anode = AstarNode(osm_node, 2, 1.1, None)
         self.assertTrue(anode.OSM_node == osm_node)
         self.assertTrue(anode.gcost == 2)
         self.assertTrue(anode.hcost == 1.1)
@@ -273,16 +279,16 @@ class SearchClassesTestUsingTestJsonFile(unittest.TestCase):
         self.nodedict.pop(node_id)
         parent_id, parent_node = random.choice(list(self.nodedict.items()))
         
-        parent = Astar_node(parent_node, 4, 5, None)
-        anode = Astar_node(osm_node, 2, 1.1, parent)
+        parent = AstarNode(parent_node, 4, 5, None)
+        anode = AstarNode(osm_node, 2, 1.1, parent)
         
         self.assertTrue(anode.parent == parent)
-        self.assertTrue(type(anode.parent)==Astar_node)
+        self.assertTrue(type(anode.parent)==AstarNode)
         self.assertTrue(parent.parent == None)
     
     def test_setup_frontier(self):
         node_id, osm_node = random.choice(list(self.nodedict.items()))
-        node = Astar_node(osm_node, 0, 100, None)
+        node = AstarNode(osm_node, 0, 100, None)
         self.nodedict.pop(node_id)
         f = Frontier(node)
         
@@ -306,8 +312,8 @@ class SearchClassesTestUsingTestJsonFile(unittest.TestCase):
         
     def test_add_to_end_of_frontier(self):
         ls = list(self.nodedict.values())
-        anode1 = Astar_node(random.choice(ls), 1, 100, None)
-        anode2 = Astar_node(random.choice(ls), 30, 75, anode1)
+        anode1 = AstarNode(random.choice(ls), 1, 100, None)
+        anode2 = AstarNode(random.choice(ls), 30, 75, anode1)
         
         f = Frontier(anode1)
         f.add(anode2)
@@ -316,17 +322,15 @@ class SearchClassesTestUsingTestJsonFile(unittest.TestCase):
         self.assertTrue(f.deque[0] == anode1)
         self.assertTrue(f.deque[1] == anode2)
     
-    # TODO Rethink how the frontier works!!!!!
-    
     def test_add_to_front_of_frontier(self):
         ls = list(self.nodedict.values())
-        anode1 = Astar_node(random.choice(ls), 1, 100, None)
-        anode2 = Astar_node(random.choice(ls), 30, 75, anode1)
+        anode1 = AstarNode(random.choice(ls), 1, 100, None)
+        anode2 = AstarNode(random.choice(ls), 30, 75, anode1)
         
         f = Frontier(anode1)
         f.add(anode2)
         
-        anode0 = Astar_node(random.choice(ls), 0, 80, anode1)
+        anode0 = AstarNode(random.choice(ls), 0, 80, anode1)
         f.add(anode0)
         self.assertTrue(len(f.deque) == 3)
         self.assertTrue(f.deque[0] == anode0)
@@ -335,16 +339,56 @@ class SearchClassesTestUsingTestJsonFile(unittest.TestCase):
         
     def test_add_to_middle_of_frontier(self):
         ls = list(self.nodedict.values())
-        anode1 = Astar_node(random.choice(ls), 1, 100, None)
-        anode3 = Astar_node(random.choice(ls), 30, 75, anode1)
+        anode1 = AstarNode(random.choice(ls), 1, 100, None)
+        anode3 = AstarNode(random.choice(ls), 30, 75, anode1)
         f = Frontier(anode1)
         f.add(anode3)
-        anode0 = Astar_node(random.choice(ls), 0, 80, anode1)
+        anode0 = AstarNode(random.choice(ls), 0, 80, anode1)
         f.add(anode0)
         
-        anode2 = Astar_node(random.choice(ls), 40, 62, anode3)
+        anode2 = AstarNode(random.choice(ls), 40, 62, anode3)
         
+class MapTestUsingJsonFile(unittest.TestCase):
+    def setUp(self):
+        self.mapdict = load_json_to_dict(TEST_JSON_FILE)
+        self.waydict = create_way_dict(self.mapdict)
+        self.nodedict = create_node_dict(self.mapdict)
+        self.bbox = get_bounding_box(self.mapdict)
+        add_all_ways_to_nodes(self.waydict, self.nodedict)
         
+        self.map = Map(self.nodedict, self.waydict, self.bbox)
+        
+        # closest street node to CVS
+        self.start_osm_node = self.nodedict[9805235577]
+        # closest street node to Mark Jupiter
+        self.goal_osm_node = self.nodedict[7707712198]
+        
+        self.start_anode = AstarNode(self.start_osm_node, 0, heuristic(self.start_osm_node, self.goal_osm_node), None)
+        self.frontier = Frontier(self.start_anode)
+    
+    def test_finds_all_neighbors(self):
+        # All neighbors to 9805235577, found by hand
+        self.map.osm_goal = self.goal_osm_node
+        start_neighbors = set([42497720, 10722370766, 10722370765, 7707712197])
+        n = self.map.neighbors(self.start_anode)
+        n = set([x.OSM_node.id for x in n])
+        self.assertEqual(n, start_neighbors)
+
+        end_neighbors = set([42472725, 3000082229, 3000084335, 7707712199, 10725896470, 2358967531])
+        n = self.map.neighbors(AstarNode(self.goal_osm_node, 0, 0, None))
+        n = set([x.OSM_node.id for x in n])
+        self.assertEqual(n, end_neighbors)
+
+    def test_expanding_with_neighbors(self):
+        self.map.osm_goal = self.goal_osm_node
+        start_neighbors = self.map.neighbors(self.start_anode)
+        
+        self.map.expand(self.frontier, start_neighbors)
+        
+        costs = [x.pathcost for x in self.frontier.deque]
+        # Ascending pathcost order
+        for i in range(len(costs)-1):
+            self.assertTrue(costs[i] < costs[i + 1])
         
         
 if __name__ == '__main__':

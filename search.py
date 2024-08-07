@@ -20,11 +20,11 @@ HIGHWAY_VALUES = ["motorway", "trunk", "primary", "secondary", "tertiary", "uncl
 AMOUNT_OF_CLOSEST_NODES = 5
 
 # (In km)
-MAX_DISTANCE_BETWEEN_NODES = 0.2
+MAX_DISTANCE_BETWEEN_NODES = 0.13
 
 Point = namedtuple('Point', ['lat', 'lon'])
 
-class OSM_Node:
+class OSMNode:
     def __init__(self, osm_id: int, lat: float, lon: float):
         self.id = osm_id
         self.coordinate = Point(lat, lon)
@@ -32,7 +32,7 @@ class OSM_Node:
         
     def __eq__(self, other):
         '''Memberwise equality'''
-        if type(other) is OSM_Node:
+        if type(other) is OSMNode:
             return self.id == other.id \
                 and self.coordinate == other.coordinate \
                 and self.ways == other.ways
@@ -69,8 +69,10 @@ class BoundingBox:
         '''returns true if the coordinates given is inside the bbox, false otherwise.'''
         return self.minlat <= point.lat and self.minlon <= point.lon and self.maxlat >= point.lat and self.maxlon >= point.lon
 
-class Astar_node():
-    def __init__(self, OSM_node: OSM_Node, gcost: float, hcost:float, parent: 'Astar_Node or None'):
+class AstarNode():
+    def __init__(self, OSM_node: OSMNode, gcost: float, hcost:float, parent: 'Astar_Node or None'):
+        # gcost (cost to reach node)
+        # hcost (estimated cost to goal)
         self.OSM_node = OSM_node
         self.gcost = gcost
         self.hcost = hcost
@@ -78,7 +80,7 @@ class Astar_node():
         self.parent = parent
 
 class Frontier():
-    def __init__(self, initial_node):
+    def __init__(self, initial_node: AstarNode):
         self.deque = deque([initial_node])
         
     def is_empty(self):
@@ -122,16 +124,23 @@ class Map():
         node = anode.OSM_node
         ways = node.ways
         neighbor_results = []
+        neighbor_ids = []
         # Append the actual traveled distance between the start node and its neighbors
-        for w in ways:
-            for n in w.nodes:
-                if n not in neighbor_results:
-                    # gcost (cost to reach node)
-                    gc = haversine(node.coordinate, n.coordinate)
-                    # hcost (estimated cost to goal)
-                    hc = haversine(self.osm_goal,coordinate, n.coordinate)
-                    # Add the new anode to the list
-                    neighbor_results.append(Astar_node(node, gc, hc, anode))
+        for way_id in ways:
+            way = self.way_dict[way_id]
+            # Checks if way is part of the highway value
+            if way.highway_value != None:
+                for node_id in way.nodes:
+                    new_node = self.node_dict[node_id]
+                    # If the node has not yet been reached or if it is the same node
+                    if node_id not in neighbor_ids and node_id != node.id:
+                        # gcost (cost to reach node)
+                        gc = haversine(node.coordinate, new_node.coordinate)
+                        # hcost (estimated cost to goal)
+                        hc = haversine(self.osm_goal.coordinate, new_node.coordinate)
+                        # Add the new anode to the list
+                        neighbor_results.append(AstarNode(new_node, gc, hc, anode))
+                        neighbor_ids.append(node_id)
         return neighbor_results 
     
     def expand(self, frontier, anodes):
@@ -149,7 +158,7 @@ class Map():
     def search(self, start, goal):
         '''Tries to find a path from the start to the goal, if there is one'''
         self.osm_goal = goal
-        beg_anode = Astar_node(start, 0, heuristic(start, goal), None)
+        beg_anode = AstarNode(start, 0, heuristic(start, goal), None)
         frontier = Frontier(start_anode)
         explored = set()
         
@@ -166,7 +175,7 @@ class Map():
                 path = []
                 # Go back and add each nodes parents until we reach the starting node
                 while current_anode.parent is not None:
-                    path.append(current_anode.OSM_Node.id)
+                    path.append(current_anode.OSMNode.id)
                     current_anode = current_anode.parent
                 # Reverse this list so that our path is start to goal
                 return path.reverse()
@@ -210,7 +219,7 @@ def create_node_dict(map_dict: dict) -> dict:
     
     # Add each node to the dict
     for item in map_dict["osm"]["node"]:
-        new_node = OSM_Node(osm_id=int(item['@id']), 
+        new_node = OSMNode(osm_id=int(item['@id']), 
                         lat=float(item['@lat']), 
                         lon=float(item['@lon']))
         node_dict[int(item['@id'])] = new_node
@@ -223,6 +232,7 @@ def create_node_dict(map_dict: dict) -> dict:
 
 def create_way_dict(map_dict: dict) -> dict:
     '''Creates a dict for ways'''
+    # "tag" will be dict if single entry of a dict, list if multiple entry of dicts
     
     way_dict = dict()
     for item in map_dict["osm"]["way"]:
@@ -234,16 +244,24 @@ def create_way_dict(map_dict: dict) -> dict:
         
         # Add the highway tag to the way
         if "tag" in item.keys(): 
-            for val in HIGHWAY_VALUES:
-                
-                # If the tag is a list
-                if type(item["tag"]) == list and item["tag"][0]["@v"] == val:
-                    new_way.highway_value = val
-                    break
-                
-                # if the tag is a dict
-                elif type(item["tag"] == dict):
-                    if "@k" in item["tag"] and item["tag"]["@k"] == "highway":
+            # If tag is a list
+            if type(item["tag"]) == list:
+                # Go through each unnamed dict
+                for unnamed_entry in item["tag"]:
+                    # if @k == highway
+                    if unnamed_entry["@k"] == "highway":
+                        # for each val, if it is a highway val, match it
+                        for val in HIGHWAY_VALUES:
+                            if unnamed_entry["@v"] == val:
+                                new_way.highway_value = val
+                                break
+                    
+            # If tag is a dict
+            elif type(item["tag"] == dict):
+                # If @k == highway
+                if "@k" in item["tag"] and item["tag"]["@k"] == "highway":
+                    # for each val, if it is a highway val, match it
+                    for val in HIGHWAY_VALUES:
                         if item["tag"]["@v"] == val:
                             new_way.highway_value = val
                             break
@@ -291,7 +309,7 @@ def get_id_from_nodes(node_dict: dict) -> tuple:
         end_id = int(input('Enter the end node id:   '))
         
         if beg_id not in node_dict or end_id not in node_dict:
-            raise Exception("OSM_Node Ids are not in the given node_dict")
+            raise Exception("OSMNode Ids are not in the given node_dict")
         
         return beg_id, end_id
     # Bad user input
@@ -303,7 +321,7 @@ def get_node_from_id(map_dict: dict, node_dict: dict, node_id) -> tuple:
 
     # Check if nodes inside the node dict
     if node_id not in node_dict:
-        raise Exception("Error: OSM_Node id not found")
+        raise Exception("Error: OSMNode id not found")
     
     return node_dict[node_id]
 
@@ -347,7 +365,7 @@ def haversine(p1: Point, p2: Point)->float:
     km = c * radius
     return km
     
-def coordinates_to_nodes(point: Point, node_dict: dict, way_dict: dict, bbox: BoundingBox) -> [OSM_Node]:
+def coordinates_to_nodes(point: Point, node_dict: dict, way_dict: dict, bbox: BoundingBox) -> [OSMNode]:
     '''converts lat and lon coordinates to the nearest nodes (5 by default)'''
     
     # Check if within bounds
@@ -365,7 +383,7 @@ def coordinates_to_nodes(point: Point, node_dict: dict, way_dict: dict, bbox: Bo
     # look through all nodes and find node(s) closest that match the highway tags at the very top
     for node in node_dict.values():
 
-        # If node not within 200 meters, skip the node
+        # If node not within specified meters, skip the node
         distance = haversine(point, node.coordinate)
         if distance > MAX_DISTANCE_BETWEEN_NODES:
             continue
@@ -375,7 +393,7 @@ def coordinates_to_nodes(point: Point, node_dict: dict, way_dict: dict, bbox: Bo
             continue
         
         # If the node is not a part of a way with a specific highway value, skip the node
-        if all(way_dict[w_id].highway_value == None for w_id in node.ways):
+        if all(way_dict[w_id].highway_value == None for w_id in node.ways):    
             continue
         
         # Abnormal case
@@ -388,7 +406,7 @@ def coordinates_to_nodes(point: Point, node_dict: dict, way_dict: dict, bbox: Bo
             close_node = closest_nodes[i]
             
             # If it does not have a node, go to next entry
-            if type(close_node) != OSM_Node:
+            if type(close_node) != OSMNode:
                 continue
             
             # It has node, so check its ways
@@ -405,8 +423,7 @@ def coordinates_to_nodes(point: Point, node_dict: dict, way_dict: dict, bbox: Bo
                     if distance_from_node_in_ls > distance and node not in closest_nodes:
                         closest_nodes[i] = node
                         closest_distances[i] = distance
-                    
-        
+                
         # Normal case
         # Now we know we can add this node into our closest nodes list. Remove its max distance node for this node
         if not abnormal_case and node not in closest_nodes:
@@ -454,7 +471,7 @@ def get_id_from_geocoding_addresses(node_dict: dict, way_dict: dict, bbox: Bound
     return beg_node_id_ls, end_node_id_ls
 
 def heuristic(node, goal_node):
-    return haversine(node.cooridnate, goal_node.coordinate)
+    return haversine(node.coordinate, goal_node.coordinate)
 
 
 
@@ -500,6 +517,8 @@ def main():
     if beg == None or end == None:
         raise Exception("No beginning or end found")
     
+    print(beg_ids)
+    print(end_ids)
 
         
 
