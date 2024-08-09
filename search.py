@@ -1,5 +1,4 @@
 # search.py 
-# TODO ANODE SEARCH SOMETHING BINARY IDK
 
 import sys
 import urllib.request
@@ -9,6 +8,7 @@ import search_geocoder
 import math
 from collections import namedtuple
 from collections import deque
+import folium_test
 
 # Overpass API is not used since it may exceed limit. 
 #   Instead, map data is downloaded from OSM
@@ -84,9 +84,11 @@ class Frontier():
         self.deque = deque([initial_node])
         
     def is_empty(self):
+        '''returns if frontier is empty'''
         return not bool(len(self.deque))
     
     def remove(self):
+        '''removes and returns left most (least pathcost) node in frontier'''
         return self.deque.popleft()
 
     def add(self, anode):
@@ -143,7 +145,7 @@ class Map():
                         neighbor_ids.append(node_id)
         return neighbor_results 
     
-    def expand(self, frontier, anodes):
+    def expand(self, frontier, anodes, explored):
         '''expands the frontier given a list of anodes'''
         # If there are no more anodes, return
         if len(anodes) == 0:
@@ -151,15 +153,16 @@ class Map():
         
         # Get the first anode, add it in the right spot, remove it from the list
         current_anode = anodes.pop(0)
-        frontier.add(current_anode)
-        self.expand(frontier, anodes)
+        if current_anode.OSM_node.id not in explored:
+            frontier.add(current_anode)
+        self.expand(frontier, anodes, explored)
         
         
-    def search(self, start, goal):
-        '''Tries to find a path from the start to the goal, if there is one'''
+    def search(self, start: OSMNode, goal: OSMNode):
+        '''Tries to find a path from the start to the goal, if there is one, returns list of node ids if found'''
         self.osm_goal = goal
         beg_anode = AstarNode(start, 0, heuristic(start, goal), None)
-        frontier = Frontier(start_anode)
+        frontier = Frontier(beg_anode)
         explored = set()
         
         while True:
@@ -170,22 +173,25 @@ class Map():
             # Pop the node at the very front of the frontier
             current_anode = frontier.remove()
             # If it is the goal node, we found a solution
-            if current_anode == end:
+            if current_anode.OSM_node == goal:
                 # Create a list for the path we found
                 path = []
                 # Go back and add each nodes parents until we reach the starting node
                 while current_anode.parent is not None:
-                    path.append(current_anode.OSMNode.id)
+                    path.append(current_anode.OSM_node)
                     current_anode = current_anode.parent
+                # Add the start node
+                path.append(current_anode.OSM_node)
                 # Reverse this list so that our path is start to goal
-                return path.reverse()
+                path.reverse()
+                return path
             
-        # since it is not the goal node, continue on by looking at its neighbors
-        # Add the current node to the explored set
-        explored.add(current_anode)
-        # Now we have to add the next nodes to the frontier using our heuristic.
-        for neighbor, actual_distance in self.neighbors(current_anode):
-            pass
+            # since it is not the goal node, continue on by looking at its neighbors
+            # Add the current node to the explored set
+            explored.add(current_anode.OSM_node.id)
+            # Now we have to add the next nodes to the frontier using our heuristic.
+            neighbors_to_be_added = self.neighbors(current_anode)
+            self.expand(frontier, neighbors_to_be_added, explored)
             
 
 
@@ -517,9 +523,12 @@ def main():
     if beg == None or end == None:
         raise Exception("No beginning or end found")
     
-    print(beg_ids)
-    print(end_ids)
+    print("Solving")
+    map_problem = Map(node_dict, way_dict, bbox)
+    path = map_problem.search(beg,end)
+    coord_ls = [(n.coordinate.lat, n.coordinate.lon) for n in path]
 
+    folium_test.make_map(coord_ls)
         
 
 if __name__ == "__main__":

@@ -379,16 +379,35 @@ class MapTestUsingJsonFile(unittest.TestCase):
         n = set([x.OSM_node.id for x in n])
         self.assertEqual(n, end_neighbors)
 
-    def test_expanding_with_neighbors(self):
+    def test_expanding_with_neighbors_keeps_order(self):
         self.map.osm_goal = self.goal_osm_node
         start_neighbors = self.map.neighbors(self.start_anode)
         
-        self.map.expand(self.frontier, start_neighbors)
+        self.map.expand(self.frontier, start_neighbors, set())
         
         costs = [x.pathcost for x in self.frontier.deque]
         # Ascending pathcost order
         for i in range(len(costs)-1):
-            self.assertTrue(costs[i] < costs[i + 1])
+            self.assertTrue(costs[i] <= costs[i + 1])
+            
+    def test_expand_with_no_neighbors(self):
+        neighbors = []
+        self.map.expand(self.frontier, neighbors, set())
+        self.assertEqual(len(self.frontier.deque), 1)
+    
+    def test_expand_with_one_neighbor(self):
+        node_id, osm_node = random.choice(list(self.nodedict.items()))
+        anode = AstarNode(osm_node, 200, 1.1, None)
+        neighbors = [anode]
+        self.map.expand(self.frontier, neighbors, set())
+        self.assertEqual(len(self.frontier.deque), 2)
+        
+    def test_search_finds_solution(self):
+        ls = self.map.search(self.start_osm_node, self.goal_osm_node)
+        self.assertTrue(type(ls) == list)
+        self.assertTrue(len(ls) > 2)
+        self.assertTrue(ls[0].id == 9805235577)
+        self.assertTrue(ls[-1].id == 7707712198)
         
         
 if __name__ == '__main__':
