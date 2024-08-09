@@ -137,7 +137,7 @@ class Map():
                     # If the node has not yet been reached or if it is the same node
                     if node_id not in neighbor_ids and node_id != node.id:
                         # gcost (cost to reach node)
-                        gc = haversine(node.coordinate, new_node.coordinate)
+                        gc = haversine(node.coordinate, new_node.coordinate) + anode.pathcost
                         # hcost (estimated cost to goal)
                         hc = haversine(self.osm_goal.coordinate, new_node.coordinate)
                         # Add the new anode to the list
@@ -147,14 +147,43 @@ class Map():
     
     def expand(self, frontier, anodes, explored):
         '''expands the frontier given a list of anodes'''
+        added = False
+        
         # If there are no more anodes, return
         if len(anodes) == 0:
             return
         
         # Get the first anode, add it in the right spot, remove it from the list
         current_anode = anodes.pop(0)
+        # If the node is not in explored, add it to the frontier if it is the shortest path cost
         if current_anode.OSM_node.id not in explored:
-            frontier.add(current_anode)
+            
+            # Since the frontier is ordered by path cost and not id, we have to linearly search
+            for n in range(len(frontier.deque)):
+                # If we found a matching node, take the one with the lesser path cost
+                if frontier.deque[n].OSM_node.id == current_anode.OSM_node.id:
+                    
+                    # Since the current node has a lesser path cost, remove n and add current
+                    if current_anode.pathcost < frontier.deque[n].pathcost:
+                        del frontier.deque[n]
+                        frontier.add(current_anode)
+                        added = True
+                        break
+                    # else, ignore it
+                    else:
+                        added = True
+                        break
+            # Add it if we didnt find the node already
+            if not added:
+                frontier.add(current_anode)
+            
+        if current_anode.OSM_node.id == 5781118834:
+            if current_anode.parent.OSM_node.id == 5781118830:
+                print(current_anode.pathcost, current_anode.parent.OSM_node.id)
+            if current_anode.parent.OSM_node.id == 7930648965:
+                print(current_anode.pathcost, current_anode.parent.OSM_node.id)
+        
+        
         self.expand(frontier, anodes, explored)
         
         
@@ -193,9 +222,6 @@ class Map():
             neighbors_to_be_added = self.neighbors(current_anode)
             self.expand(frontier, neighbors_to_be_added, explored)
             
-
-
-
 
 def ask_for_format() -> str:
     '''Gets the format of either nodes or addresses'''
