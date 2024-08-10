@@ -46,11 +46,11 @@ class OSMNode:
 class Way:
     def __init__(self, osm_id: int):
         self.id = osm_id
-        self.nodes = set()
+        self.nodes = []
         self.highway_value = None
     
     def add_node(self, node: int):
-        self.nodes.add(node)
+        self.nodes.append(node)
 
 class BoundingBox:
     def __init__(self, minlat, minlon, maxlat, maxlon):
@@ -130,19 +130,44 @@ class Map():
         # Append the actual traveled distance between the start node and its neighbors
         for way_id in ways:
             way = self.way_dict[way_id]
-            # Checks if way is part of the highway value
-            if way.highway_value != None:
-                for node_id in way.nodes:
-                    new_node = self.node_dict[node_id]
-                    # If the node has not yet been reached or if it is the same node
-                    if node_id not in neighbor_ids and node_id != node.id:
-                        # gcost (cost to reach node)
-                        gc = haversine(node.coordinate, new_node.coordinate) + anode.pathcost
-                        # hcost (estimated cost to goal)
-                        hc = haversine(self.osm_goal.coordinate, new_node.coordinate)
-                        # Add the new anode to the list
-                        neighbor_results.append(AstarNode(new_node, gc, hc, anode))
-                        neighbor_ids.append(node_id)
+            nodes_in_way = len(way.nodes)
+            
+            # If the highway value is None, move on to next way
+            if way.highway_value == None:
+                continue
+            
+            # Find the current node in the way
+            position = way.nodes.index(node.id)
+            
+            to_be_added = []
+            # If the node is at the front, add the next node
+            if position == 0:
+                to_be_added.append(way.nodes[1])
+            
+            # If the node is at the back, add the previous node
+            elif position == nodes_in_way - 1:
+                to_be_added.append(way.nodes[-2])
+            
+            # else, add both previous and next nodes
+            else:
+                to_be_added.append(way.nodes[position + 1])
+                to_be_added.append(way.nodes[position - 1])
+            
+            # For each node we could add
+            for node_id in to_be_added:
+                new_node = self.node_dict[node_id]
+                # If the node is already added or if it is the same as the parent, skip it
+                if node_id in neighbor_ids or node_id == node.id:
+                    continue
+                
+                # gcost (cost to reach node)
+                gc = haversine(node.coordinate, new_node.coordinate) + anode.pathcost
+                # hcost (estimated cost to goal)
+                hc = haversine(self.osm_goal.coordinate, new_node.coordinate)
+                # Add the new anode to the list
+                neighbor_results.append(AstarNode(new_node, gc, hc, anode))
+                neighbor_ids.append(node_id)            
+            
         return neighbor_results 
     
     def expand(self, frontier, anodes, explored):
@@ -176,16 +201,9 @@ class Map():
             # Add it if we didnt find the node already
             if not added:
                 frontier.add(current_anode)
-            
-        if current_anode.OSM_node.id == 5781118834:
-            if current_anode.parent.OSM_node.id == 5781118830:
-                print(current_anode.pathcost, current_anode.parent.OSM_node.id)
-            if current_anode.parent.OSM_node.id == 7930648965:
-                print(current_anode.pathcost, current_anode.parent.OSM_node.id)
         
         
         self.expand(frontier, anodes, explored)
-        
         
     def search(self, start: OSMNode, goal: OSMNode):
         '''Tries to find a path from the start to the goal, if there is one, returns list of node ids if found'''

@@ -117,21 +117,17 @@ class WayTest(unittest.TestCase):
         
     def test_ways_have_correct_data(self):
         self.assertTrue(self.way.id==100)
-        self.assertTrue(self.way.nodes==set())
+        self.assertTrue(self.way.nodes==[])
         
     def test_ways_have_no_nodes_on_construction(self):
-        self.assertEqual(self.way.nodes, set())
+        self.assertEqual(self.way.nodes, [])
         
     def test_ways_can_add_nodes(self):
         self.way.add_node(self.node.id)
-        self.assertEqual(set, type(self.way.nodes))
-        self.assertEqual(self.way.nodes, {12345})
+        self.assertEqual(list, type(self.way.nodes))
+        self.assertEqual(self.way.nodes, [12345])
         self.assertEqual(len(self.way.nodes), 1)
         
-    def test_cannot_add_same_node_multiple_times(self):
-        self.way.add_node(self.node.id)
-        self.way.add_node(self.node.id)
-        self.assertEqual(len(self.way.nodes), 1)
         
 class BoundingBoxTest(unittest.TestCase):
     def test_create_bbox(self):
@@ -369,15 +365,18 @@ class MapTestUsingJsonFile(unittest.TestCase):
     def test_finds_all_neighbors(self):
         # All neighbors to 9805235577, found by hand
         self.map.osm_goal = self.goal_osm_node
-        start_neighbors = set([42497720, 10722370766, 10722370765, 7707712197])
+        start_neighbors = set([42497720, 10722370766])
         n = self.map.neighbors(self.start_anode)
         n = set([x.OSM_node.id for x in n])
         self.assertEqual(n, start_neighbors)
 
-        end_neighbors = set([42472725, 3000082229, 3000084335, 7707712199, 10725896470, 2358967531])
+        end_neighbors = set([10725896470, 2358967531])
         n = self.map.neighbors(AstarNode(self.goal_osm_node, 0, 0, None))
         n = set([x.OSM_node.id for x in n])
         self.assertEqual(n, end_neighbors)
+        
+    # TODO write tests that only find neighbors when the node is at the beg or end
+    # hard to implement bc its hard to find an end node a part of only 1 way
 
     def test_expanding_with_neighbors_keeps_order(self):
         self.map.osm_goal = self.goal_osm_node
@@ -409,11 +408,6 @@ class MapTestUsingJsonFile(unittest.TestCase):
         self.assertTrue(ls[0].id == 9805235577)
         self.assertTrue(ls[-1].id == 7707712198)
         
-# 2130 Park Centre Dr, Las Vegas, NV 89135
-# 9401 Steeplehill Dr, Las Vegas, NV 89117      
 
-
-# 1585026724
-# 137646882
 if __name__ == '__main__':
     unittest.main()
